@@ -1,0 +1,16 @@
+{
+  "autoPublish": true,
+  "draft": false,
+  "descendants": [],
+  "firstCommentText": "",
+  "hasNotReadNotes": false,
+  "media": ["{{VIDEO_URL}}"],
+  "videoThumbnailUrl": "{{COVER_URL}}",
+  "mediaAltText": [],
+  "providers": [{"network": "instagram"}],
+  "publicationDate": {"dateTime": "{{DATETIME}}", "timezone": "Indian/Maldives"},
+  "shortener": false,
+  "smartLinkData": {"ids": []},
+  "text": "{{CAPTION}}",
+  "instagramData": {"type": "REEL", "showReelOnFeed": true, "isAiGenerated": true, "collaborators": [], "carouselTags": {}}
+}
