@@ -142,6 +142,38 @@ def apply_camera(img, z, dx, dy, rot):
     return img.transform((W, H), Image.AFFINE, (a, b, c, d, e, f), resample=Image.BICUBIC)
 
 
+# ----------------------------------------------------------------------------- whip blur + light sweep (scene transitions)
+def motion_blur(img, px, angle_deg=0.0, taps=9):
+    """directional motion blur: running average of translated copies"""
+    if px < 1.0:
+        return img
+    ang = math.radians(angle_deg)
+    acc = None
+    for i in range(taps):
+        o = (i / (taps - 1) - 0.5) * px
+        sh = img.transform(img.size, Image.AFFINE, (1, 0, -o * math.cos(ang), 0, 1, -o * math.sin(ang)), resample=Image.BILINEAR)
+        acc = sh if acc is None else Image.blend(acc, sh, 1.0 / (i + 1))
+    return acc
+
+
+@lru_cache(None)
+def _sweep_coord(angle_deg):
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    a = math.radians(angle_deg)
+    s_ = xx * math.cos(a) + yy * math.sin(a)
+    return s_, float(s_.min()), float(s_.max())
+
+
+def light_sweep(img, p, angle_deg=62.0, width=150.0, col=(255, 232, 178), amt=0.5):
+    """a soft bright diagonal band travelling across the frame (p 0..1)"""
+    s_, lo, hi = _sweep_coord(angle_deg)
+    pos = lo - width * 2 + (hi - lo + width * 4) * p
+    band = np.exp(-((s_ - pos) / width) ** 2) * amt
+    a = np.asarray(img.convert("RGB"), np.float32)
+    a = a + band[..., None] * np.array(col, np.float32)
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).convert("RGBA")
+
+
 # ----------------------------------------------------------------------------- post FX (vignette, bloom, grain, chroma, flash)
 @lru_cache(None)
 def _vig(strength):
@@ -194,12 +226,13 @@ class PremiumReel(Reel):
     """
 
     def __init__(self, tim, scenes, world="noir", cam=None, seed=1, bokeh_n=40, vignette=0.5, grain=0.5, bloom=0.30,
-                 tint=(1.0, 1.0, 1.0), flashes=(), chroma_at=(), aurora_strength=0.62, mark=True, top=(), **kw):
+                 tint=(1.0, 1.0, 1.0), flashes=(), chroma_at=(), aurora_strength=0.62, mark=True, top=(), whips=(), sweeps=(), **kw):
         super().__init__(tim, scenes, theme=world, header=False, **kw)
         self.world, self.cam, self.seed = world, cam or Cam(), seed
         self.bokeh_n, self.vig, self.grain, self.bloom, self.tint = bokeh_n, vignette, grain, bloom, tint
         self.flashes, self.chroma_at, self.astr, self.mark = list(flashes), list(chroma_at), aurora_strength, mark
         self.top = list(top)           # drawn AFTER camera + post (stable, crisp): captions, brand mark
+        self.whips, self.sweeps = list(whips), list(sweeps)    # whips: [(t, dur, px, angle_deg)] motion blur at cuts; sweeps: [(t, dur)] light sweeps
 
     def draw(self, t):
         tim = self.tim
@@ -210,6 +243,14 @@ class PremiumReel(Reel):
         for fn in self.scenes:
             fn(cv, t)
         cv = apply_camera(cv, *self.cam(t))
+        for t0, dur, px, ang in self.whips:
+            p = (t - t0) / dur
+            if 0 <= p < 1:
+                cv = motion_blur(cv, px * (1 - p) ** 1.6, ang)
+        for t0, dur in self.sweeps:
+            p = (t - t0) / dur
+            if 0 <= p < 1:
+                cv = light_sweep(cv, ease_in_out(p), amt=0.55 * math.sin(math.pi * min(1, p * 1.15)) ** 0.7)
         ch = 0.0
         for t0, px, dur in self.chroma_at:
             p = (t - t0) / dur

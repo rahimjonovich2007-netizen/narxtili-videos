@@ -23,9 +23,10 @@ LW = CW + 2 * OX
 
 PALETTES = {
     # warm skin, dark hair, charcoal blazer, cream shirt, gold tie  (house look of the host)
-    "ali": dict(skin=(236, 184, 144), skin_d=(206, 146, 108), hair=(30, 24, 24), hair_l=(66, 54, 52), jacket=(38, 42, 56),
-                jacket_d=(26, 29, 40), jacket_l=(64, 70, 90), shirt=(247, 243, 233), shirt_d=(214, 208, 194), tie=(244, 196, 92),
-                tie_d=(190, 140, 44), iris=(78, 48, 30), lip=(190, 104, 94), rim=(255, 206, 120)),
+    "ali": dict(skin=(244, 194, 154), skin_d=(222, 152, 118), skin_l=(255, 228, 196), hair=(34, 26, 26), hair_l=(110, 90, 84),
+                jacket=(42, 47, 64), jacket_d=(26, 29, 40), jacket_l=(70, 78, 102), shirt=(247, 243, 233), shirt_d=(206, 200, 188),
+                tie=(244, 196, 92), tie_d=(176, 124, 36), iris=(66, 40, 26), iris_l=(158, 104, 56), lip=(198, 108, 98), lip_d=(160, 82, 76),
+                rim=(255, 206, 120), rim2=(120, 210, 230)),
 }
 
 BASE = dict(brow=0.0, tilt=0.0, asym=0.0, eo=1.0, wink=0.0, lx=0.0, ly=0.0, smile=0.1, mo=0.0, mw=1.0, blush=0.0, sweat=0.0,
@@ -88,23 +89,116 @@ def speech_env(wav_path, fps=30, smooth=3):
     return f
 
 
-# ----------------------------------------------------------------------------- drawing helpers
-def _S(pts):
-    return [(x * SS, y * SS) for x, y in pts]
+# ----------------------------------------------------------------------------- drawing helpers (v2: volumetric shading)
+from scipy.ndimage import gaussian_filter
+
+HS = 2          # head supersampling
+BS = 2          # body supersampling
 
 
-def _cap(d, p0, p1, w, fill):
-    d.line([(p0[0] * SS, p0[1] * SS), (p1[0] * SS, p1[1] * SS)], fill=fill, width=int(w * SS))
-    r = w * SS / 2
+def _arr(im):
+    return np.asarray(im, np.float32)
+
+
+def _alpha(im):
+    return np.asarray(im.getchannel("A"), np.float32) / 255.0
+
+
+def _smooth(pts, n=10, closed=True):
+    """Catmull-Rom spline through pts"""
+    out = []
+    N = len(pts)
+    rng = range(N) if closed else range(N - 1)
+    for i in rng:
+        p0, p1, p2, p3 = pts[(i - 1) % N], pts[i], pts[(i + 1) % N], pts[(i + 2) % N]
+        for k in range(n):
+            u = k / n
+            u2, u3 = u * u, u * u * u
+            out.append(tuple(0.5 * ((2 * p1[j]) + (-p0[j] + p2[j]) * u + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * u2
+                                    + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * u3) for j in (0, 1)))
+    return out
+
+
+def pillow(im, sigma, strength=0.5, light=(-0.55, -0.8), spec=0.0, sh_col=(30, 16, 28), hi_col=(255, 244, 228), down=4):
+    """volumetric shading from the blurred alpha (a soft 'pillow' height map): shadow away from the light, highlight toward it.
+    Works on the bounding box of the shape only (big speed-up on the full-size layers)."""
+    bb = im.getchannel("A").getbbox()
+    if bb is None:
+        return im
+    pad = int(sigma * 4) + 8
+    box = (max(0, bb[0] - pad), max(0, bb[1] - pad), min(im.width, bb[2] + pad), min(im.height, bb[3] + pad))
+    if (box[2] - box[0]) * (box[3] - box[1]) > 0.8 * im.width * im.height:
+        return _pillow_core(im, sigma, strength, light, spec, sh_col, hi_col, down)
+    res = _pillow_core(im.crop(box), sigma, strength, light, spec, sh_col, hi_col, down)
+    out = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    out.paste(res, (box[0], box[1]))
+    return out
+
+
+def _pillow_core(im, sigma, strength, light, spec, sh_col, hi_col, down):
+    a = _alpha(im)
+    H_, W_ = a.shape
+    sm = np.asarray(Image.fromarray((a * 255).astype(np.uint8)).resize((max(2, W_ // down), max(2, H_ // down)), Image.BILINEAR), np.float32) / 255
+    h = gaussian_filter(sm, sigma / down)
+    gy, gx = np.gradient(h)
+    s = sigma / down * 1.7
+    nx, ny = -gx * s, -gy * s
+    ln = np.sqrt(nx * nx + ny * ny + 1.0)
+    lx, ly, lz = light[0], light[1], 0.85
+    lln = math.sqrt(lx * lx + ly * ly + lz * lz)
+    lam = (nx * lx + ny * ly + lz) / ln / lln
+    sh = lam - lz / lln
+    sh = np.asarray(Image.fromarray(sh.astype(np.float32), "F").resize((W_, H_), Image.BICUBIC))
+    arr = _arr(im).copy()
+    neg = np.clip(-sh * 2.4, 0, 1)[..., None]
+    pos = np.clip(sh * 2.4, 0, 1)[..., None]
+    rgb = arr[..., :3]
+    rgb = rgb * (1 - neg * strength) + np.array(sh_col, np.float32) * neg * strength
+    if spec > 0:
+        rgb = rgb + (np.array(hi_col, np.float32) - rgb) * pos * spec
+    arr[..., :3] = np.clip(rgb, 0, 255)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+
+def _clip_to(layer, mask_im):
+    """multiply layer alpha with another image's alpha (only inside the mask's bounding box)"""
+    bb = mask_im.getchannel("A").getbbox()
+    if bb is None:
+        return Image.new("RGBA", layer.size, (0, 0, 0, 0))
+    sub = layer.crop(bb)
+    arr = _arr(sub).copy()
+    arr[..., 3] *= _alpha(mask_im.crop(bb))
+    res = Image.fromarray(arr.astype(np.uint8), "RGBA")
+    out = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+    out.paste(res, (bb[0], bb[1]))
+    return out
+
+
+def _soft(size1, draw_fn, blur, S):
+    """draw soft shapes at 1x resolution, blur there (cheap), upscale to S x"""
+    im = Image.new("RGBA", size1, (0, 0, 0, 0))
+    draw_fn(ImageDraw.Draw(im))
+    if blur:
+        im = im.filter(ImageFilter.GaussianBlur(blur))
+    return im.resize((size1[0] * S, size1[1] * S), Image.BICUBIC)
+
+
+def _capS(d, p0, p1, w, fill, S):
+    d.line([(p0[0] * S, p0[1] * S), (p1[0] * S, p1[1] * S)], fill=fill, width=int(w * S))
+    r = w * S / 2
     for p in (p0, p1):
-        d.ellipse([p[0] * SS - r, p[1] * SS - r, p[0] * SS + r, p[1] * SS + r], fill=fill)
+        d.ellipse([p[0] * S - r, p[1] * S - r, p[0] * S + r, p[1] * S + r], fill=fill)
 
 
-def _ell(d, cx, cy, rx, ry, fill, outline=None, ow=0):
-    d.ellipse([(cx - rx) * SS, (cy - ry) * SS, (cx + rx) * SS, (cy + ry) * SS], fill=fill, outline=outline, width=int(ow * SS))
+def _polyS(d, pts, fill, S):
+    d.polygon([(x * S, y * S) for x, y in pts], fill=fill)
 
 
-def _bez(p0, p1, p2, n=18):
+def _ellS(d, cx, cy, rx, ry, fill, S, outline=None, ow=0):
+    d.ellipse([(cx - rx) * S, (cy - ry) * S, (cx + rx) * S, (cy + ry) * S], fill=fill, outline=outline, width=int(ow * S))
+
+
+def _bez(p0, p1, p2, n=20):
     out = []
     for i in range(n + 1):
         u = i / n
@@ -113,9 +207,8 @@ def _bez(p0, p1, p2, n=18):
     return out
 
 
-def _ik(S, T, l1, l2, side, cxm=320):
-    """two-bone IK; the elbow is the solution farther from the body centre line (outward)"""
-    dx, dy = T[0] - S[0], T[1] - S[1]
+def _ik(S_, T, l1, l2, side, cxm=320):
+    dx, dy = T[0] - S_[0], T[1] - S_[1]
     d = max(abs(l1 - l2) + 2.0, min(l1 + l2 - 1.0, math.hypot(dx, dy)))
     th = math.atan2(dy, dx)
     c = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)
@@ -123,241 +216,458 @@ def _ik(S, T, l1, l2, side, cxm=320):
     cands = []
     for sgn in (-1, 1):
         a = th + sgn * al
-        cands.append((S[0] + l1 * math.cos(a), S[1] + l1 * math.sin(a)))
+        cands.append((S_[0] + l1 * math.cos(a), S_[1] + l1 * math.sin(a)))
     E = max(cands, key=lambda p: 0.5 * abs(p[0] - cxm) + 0.9 * p[1])
     wd = (T[0] - E[0], T[1] - E[1])
     ln = math.hypot(*wd) or 1.0
-    Wp = (E[0] + wd[0] / ln * l2, E[1] + wd[1] / ln * l2)
-    return E, Wp
+    return E, (E[0] + wd[0] / ln * l2, E[1] + wd[1] / ln * l2)
+
+
+def _face_outline(cx, cy, n=120):
+    pts = []
+    for i in range(n):
+        th = 2 * math.pi * i / n
+        c, s = math.cos(th), math.sin(th)
+        if s > 0:
+            p = 2.7
+            c2 = math.copysign(abs(c) ** (2 / p), c)
+            s2 = abs(s) ** (2 / p)
+            k = 1 - 0.20 * (s ** 1.4)
+            pts.append((cx + 112 * c2 * k, cy + 124 * s2))
+        else:
+            pts.append((cx + 112 * c, cy + 118 * s))
+    return pts
 
 
 def _head(st, pal, mouth_open):
-    """head layer (380 x 400 local), head centre at (190, 190)"""
+    """head layer (380 x 400 local), head centre (190, 190); supersampled x3"""
+    S = HS
     HW, HH = 380, 400
-    im = Image.new("RGBA", (HW * SS, HH * SS), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
     cx, cy = 190, 190
-    skin, skin_d, hair, hair_l = pal["skin"] + (255,), pal["skin_d"] + (255,), pal["hair"] + (255,), pal["hair_l"] + (255,)
-    # hair back
-    _ell(d, cx, cy - 14, 124, 128, hair)
-    # ears
+    skin, skin_d, skin_l = pal["skin"], pal["skin_d"], pal["skin_l"]
+    hair, hair_l = pal["hair"], pal["hair_l"]
+    size = (HW * S, HH * S)
+    out = Image.new("RGBA", size, (0, 0, 0, 0))
+
+    # ---------------------------------------------------------------- hair (back mass)
+    back = Image.new("RGBA", size, (0, 0, 0, 0))
+    bd = ImageDraw.Draw(back)
+    _ellS(bd, cx, cy - 22, 130, 140, hair + (255,), S)
+    back = pillow(back, 26 * S, 0.6, light=(-0.4, -0.9), spec=0.35, sh_col=(8, 6, 8), hi_col=hair_l, down=6)
+    out.alpha_composite(back)
+
+    # ---------------------------------------------------------------- ears
+    ears = Image.new("RGBA", size, (0, 0, 0, 0))
+    ed = ImageDraw.Draw(ears)
     for sx in (-1, 1):
-        _ell(d, cx + sx * 112, cy + 6, 22, 32, skin_d)
-        _ell(d, cx + sx * 112, cy + 6, 12, 20, pal["lip"] + (120,))
-    # face
-    _ell(d, cx, cy, 112, 124, skin)
-    _ell(d, cx, cy + 62, 90, 66, skin)
-    # soft face shade (left side) and chin
-    sh = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    sd = ImageDraw.Draw(sh)
-    _ell(sd, cx - 70, cy + 20, 70, 120, skin_d[:3] + (70,))
-    _ell(sd, cx, cy + 118, 70, 26, skin_d[:3] + (60,))
-    mask = Image.new("L", im.size, 0)
-    ImageDraw.Draw(mask).ellipse([(cx - 112) * SS, (cy - 124) * SS, (cx + 112) * SS, (cy + 124) * SS], fill=255)
-    ImageDraw.Draw(mask).ellipse([(cx - 90) * SS, (cy - 4) * SS, (cx + 90) * SS, (cy + 128) * SS], fill=255)
-    sh.putalpha(Image.fromarray((np.array(sh.getchannel("A"), np.float32) * (np.array(mask, np.float32) / 255)).astype(np.uint8)))
-    sh = sh.filter(ImageFilter.GaussianBlur(10 * SS))
-    im.alpha_composite(sh)
-    d = ImageDraw.Draw(im)
-    # blush
-    if st["blush"] > 0.02:
-        bl = Image.new("RGBA", im.size, (0, 0, 0, 0))
-        bd = ImageDraw.Draw(bl)
+        _ellS(ed, cx + sx * 112, cy + 8, 22, 32, skin_d + (255,), S)
+    ears = pillow(ears, 9 * S, 0.5, spec=0.15, sh_col=(120, 60, 50), down=3)
+    out.alpha_composite(ears)
+    inner = _soft((HW, HH), lambda d: [d.ellipse([cx + sx * 112 - 9, cy - 6, cx + sx * 112 + 9, cy + 26], fill=pal["lip"] + (110,)) for sx in (-1, 1)], 3, S)
+    out.alpha_composite(inner)
+
+    # ---------------------------------------------------------------- face skin with volume
+    face = Image.new("RGBA", size, (0, 0, 0, 0))
+    fd = ImageDraw.Draw(face)
+    fo = _face_outline(cx, cy)
+    fd.polygon([(x * S, y * S) for x, y in fo], fill=skin + (255,))
+    face = pillow(face, 34 * S, 0.40, light=(-0.45, -0.8), spec=0.30, sh_col=skin_d, hi_col=skin_l, down=6)
+    # soft anatomy overlays (1x, blurred)
+    sm = st["smile"]
+
+    def anat(d):
         for sx in (-1, 1):
-            _ell(bd, cx + sx * 70, cy + 46, 30, 18, (244, 120, 110, int(110 * st["blush"])))
-        im.alpha_composite(bl.filter(ImageFilter.GaussianBlur(8 * SS)))
-        d = ImageDraw.Draw(im)
-    # hair front (side-swept fringe + sideburns)
-    fr = [(-118, -4), (-122, -58), (-96, -104), (-40, -132), (30, -136), (92, -112), (120, -64), (118, -2),
-          (104, -34), (88, -62), (40, -84), (-6, -78), (-52, -66), (-94, -40)]
-    d.polygon(_S([(cx + x, cy + y) for x, y in fr]), fill=hair)
-    d.polygon(_S([(cx - 118, cy - 4), (cx - 108, cy + 40), (cx - 96, cy + 8), (cx - 98, cy - 36)]), fill=hair)
-    d.polygon(_S([(cx + 118, cy - 4), (cx + 108, cy + 40), (cx + 96, cy + 8), (cx + 98, cy - 36)]), fill=hair)
-    d.polygon(_S([(cx - 40, cy - 128), (cx + 10, cy - 134), (cx + 60, cy - 120), (cx + 4, cy - 108)]), fill=hair_l[:3] + (140,))
-    # eyebrows
+            d.ellipse([cx + sx * 44 - 38, cy - 28, cx + sx * 44 + 38, cy + 12], fill=skin_d + (26,))          # eye sockets
+            d.ellipse([cx + sx * 74 - 30, cy + 34, cx + sx * 74 + 30, cy + 70], fill=(244, 128, 112, int(18 + 110 * st["blush"])))   # cheeks
+            d.ellipse([cx + sx * 25 - 8, cy + 30, cx + sx * 25 + 8, cy + 58], fill=skin_d + (26,))           # nose sides
+        d.ellipse([cx - 56, cy + 108, cx + 56, cy + 142], fill=skin_d + (60,))                                  # under chin / jaw
+        d.ellipse([cx - 36, cy + 56, cx + 36, cy + 82], fill=skin_d + (34,))                                     # under nose
+    face = Image.alpha_composite(face, _clip_to(_soft((HW, HH), anat, 7, S), face))
+
+    def hl(d):
+        d.ellipse([cx - 26, cy - 64, cx + 26, cy - 18], fill=skin_l + (34,))        # forehead sheen
+        d.ellipse([cx - 84, cy + 22, cx - 48, cy + 54], fill=skin_l + (30,))
+        d.ellipse([cx + 48, cy + 22, cx + 84, cy + 54], fill=skin_l + (30,))
+        d.ellipse([cx - 10, cy + 33, cx + 10, cy + 47], fill=skin_l + (90,))        # nose tip
+    face = Image.alpha_composite(face, _clip_to(_soft((HW, HH), hl, 10, S), face))
+    out.alpha_composite(face)
+    d = ImageDraw.Draw(out)
+
+    # ---------------------------------------------------------------- nose details
+    for sx in (-1, 1):
+        d.arc([(cx + sx * 11 - 7) * S, (cy + 44) * S, (cx + sx * 11 + 7) * S, (cy + 54) * S], 20 if sx < 0 else 160, 200 if sx < 0 else 340, fill=skin_d + (200,), width=int(3 * S))
+    d.arc([(cx - 14) * S, (cy + 30) * S, (cx + 14) * S, (cy + 54) * S], 25, 155, fill=skin_d + (230,), width=int(3.5 * S))
+
+    # ---------------------------------------------------------------- eyes (clean cartoon: white + big dark iris + highlights)
+    for sx, k in ((-1, 0), (1, 1)):
+        ex, ey = cx + sx * 46, cy - 2
+        eo = clamp(st["eo"] * (1 - (st["wink"] if k else 0.0)), 0, 1.3)
+        if eo < 0.18:                                                       # closed eye: lash line
+            if sm > 0.35:
+                d.arc([(ex - 22) * S, (ey - 10) * S, (ex + 22) * S, (ey + 14) * S], 200, 340, fill=hair + (255,), width=int(6.5 * S))
+            else:
+                d.arc([(ex - 22) * S, (ey - 14) * S, (ex + 22) * S, (ey + 8) * S], 18, 162, fill=hair + (255,), width=int(6.5 * S))
+            continue
+        rx, ry = 24, 22 * eo
+        sc = Image.new("RGBA", size, (0, 0, 0, 0))
+        scd = ImageDraw.Draw(sc)
+        _ellS(scd, ex, ey, rx, ry, (252, 250, 247, 255), S)
+        sh = _soft((HW, HH), lambda dd: dd.ellipse([ex - rx - 4, ey - ry - 22, ex + rx + 4, ey - ry * 0.3], fill=(90, 60, 60, 120)), 4, S)
+        sc = Image.alpha_composite(sc, _clip_to(sh, sc))
+        ix, iy = ex + st["lx"] * 8, ey + st["ly"] * 6
+        ir = 15.5
+        yy, xx = np.mgrid[0:int(ir * 2 * S) + 2, 0:int(ir * 2 * S) + 2].astype(np.float32)
+        c0 = ir * S
+        rr = np.sqrt((xx - c0) ** 2 + (yy - c0) ** 2) / c0
+        base = np.array(pal["iris"], np.float32)
+        light_ = np.array(pal["iris_l"], np.float32)
+        t_ = np.clip((rr - 0.25) / 0.7, 0, 1)[..., None]
+        col = light_ * (1 - t_) + base * t_
+        col = np.where((rr < 0.40)[..., None], np.array((14, 10, 10), np.float32), col)
+        al_ = np.clip((1 - rr) * c0 / 1.5, 0, 1)
+        iris = Image.fromarray(np.dstack([col, al_ * 255]).astype(np.uint8), "RGBA")
+        irl = Image.new("RGBA", size, (0, 0, 0, 0))
+        irl.alpha_composite(iris, (int((ix - ir) * S), int((iy - ir) * S)))
+        irl = _clip_to(irl, sc)
+        sc.alpha_composite(irl)
+        scd = ImageDraw.Draw(sc)
+        hx_, hy_ = ix - 5.5, iy - 6
+        scd.ellipse([(hx_ - 4.2) * S, (hy_ - 4.2) * S, (hx_ + 4.2) * S, (hy_ + 4.2) * S], fill=(255, 255, 255, 250))
+        scd.ellipse([(ix + 5) * S - 2 * S, (iy + 5.5) * S - 2 * S, (ix + 5) * S + 2 * S, (iy + 5.5) * S + 2 * S], fill=(255, 255, 255, 150))
+        out.alpha_composite(sc)
+        d = ImageDraw.Draw(out)
+        d.arc([(ex - rx) * S, (ey - ry) * S, (ex + rx) * S, (ey + ry) * S], 190, 350, fill=hair + (255,), width=int(5 * S))
+
+    # ---------------------------------------------------------------- eyebrows (tapered)
     for sx, k in ((-1, 0), (1, 1)):
         raise_ = st["brow"] + (st["asym"] if k else 0.0)
-        by_ = cy - 52 - raise_ * 17
-        bx = cx + sx * 44
-        L = 30
-        inner = (bx - sx * L, by_ - st["tilt"] * 11)
-        outer = (bx + sx * L, by_ + st["tilt"] * 8)
-        _cap(d, inner, outer, 11, hair)
-    # eyes
-    for sx, k in ((-1, 0), (1, 1)):
-        ex, ey = cx + sx * 44, cy - 6
-        eo = st["eo"] * (1 - (st["wink"] if k else 0.0))
-        eo = clamp(eo, 0, 1.3)
-        if eo < 0.16:
-            if st["smile"] > 0.4:
-                d.arc([(ex - 22) * SS, (ey - 14) * SS, (ex + 22) * SS, (ey + 14) * SS], 200, 340, fill=hair, width=int(7 * SS))
-            else:
-                d.arc([(ex - 22) * SS, (ey - 12) * SS, (ex + 22) * SS, (ey + 12) * SS], 20, 160, fill=hair, width=int(7 * SS))
-            continue
-        ry = 21 * eo
-        _ell(d, ex, ey, 25, ry, (251, 249, 245, 255))
-        ix = ex + st["lx"] * 8
-        iy = ey + st["ly"] * 7
-        ir = 13
-        # clip iris to the eye by drawing on a mask
-        eye = Image.new("RGBA", im.size, (0, 0, 0, 0))
-        ed = ImageDraw.Draw(eye)
-        _ell(ed, ix, iy, ir, min(ir * 1.05, ry + 2), pal["iris"] + (255,))
-        _ell(ed, ix, iy, ir * 0.5, min(ir * 0.55, ry), (18, 12, 10, 255))
-        _ell(ed, ix - 4, iy - 5, 3.4, 3.4, (255, 255, 255, 235))
-        em = Image.new("L", im.size, 0)
-        ImageDraw.Draw(em).ellipse([(ex - 25) * SS, (ey - ry) * SS, (ex + 25) * SS, (ey + ry) * SS], fill=255)
-        eye.putalpha(Image.fromarray((np.array(eye.getchannel("A"), np.float32) * (np.array(em, np.float32) / 255)).astype(np.uint8)))
-        im.alpha_composite(eye)
-        d = ImageDraw.Draw(im)
-        # lids
-        lid = hair[:3] + (255,)
-        d.arc([(ex - 25) * SS, (ey - ry) * SS, (ex + 25) * SS, (ey + ry) * SS], 195, 345, fill=lid, width=int(5 * SS))
-        if eo < 0.7:
-            d.chord([(ex - 26) * SS, (ey - ry - 2) * SS, (ex + 26) * SS, (ey + ry + 2) * SS], 180, 360, fill=skin_d[:3] + (255,))
-            d.arc([(ex - 25) * SS, (ey - ry) * SS, (ex + 25) * SS, (ey + ry) * SS], 195, 345, fill=lid, width=int(5 * SS))
-    # nose
-    d.arc([(cx - 12) * SS, (cy + 14) * SS, (cx + 12) * SS, (cy + 44) * SS], 20, 160, fill=skin_d[:3] + (255,), width=int(5 * SS))
-    # mouth
+        by_ = cy - 47 - raise_ * 17
+        bx = cx + sx * 46
+        L = 33
+        inner = (bx - sx * L, by_ - st["tilt"] * 12)
+        outer = (bx + sx * L, by_ + st["tilt"] * 9 + 1)
+        mid = ((inner[0] + outer[0]) / 2, (inner[1] + outer[1]) / 2 - 4)
+        # polygon with thickness profile
+        def side(p, th):
+            return (p[0], p[1] - th)
+        top = _bez((inner[0], inner[1] - 7), (mid[0], mid[1] - 9), (outer[0], outer[1] - 3.5), 12)
+        bot = _bez((outer[0], outer[1] + 3.5), (mid[0], mid[1] + 5), (inner[0], inner[1] + 7), 12)
+        bl = Image.new("RGBA", size, (0, 0, 0, 0))
+        _polyS(ImageDraw.Draw(bl), top + bot, hair + (255,), S)
+        bl = bl.filter(ImageFilter.GaussianBlur(0.8 * S))
+        out.alpha_composite(bl)
+    d = ImageDraw.Draw(out)
+
+    # ---------------------------------------------------------------- mouth
     mo = clamp(mouth_open, 0, 1)
-    sm = st["smile"]
-    hw = 44 * st["mw"] * (1 + 0.12 * max(0, sm))
-    my = cy + 74
+    hw = 44 * st["mw"] * (1 + 0.14 * max(0, sm))
+    my = cy + 76
     yc = my - sm * 17
-    ym = my + (2 if sm >= 0 else -4 * -sm) - (0 if sm >= 0 else 6 * -sm)
-    up = _bez((cx - hw, yc), (cx, ym + (6 * sm if sm > 0 else -8 * -sm)), (cx + hw, yc))
-    lw_ = my + mo * 50 + max(0, sm) * 10 + 4
-    lo = _bez((cx + hw, yc), (cx, lw_ + mo * 16 + 2), (cx - hw, yc))
+    ym = my + (2 if sm >= 0 else -10 * -sm) + (6 * sm if sm > 0 else 0)
+    up = _bez((cx - hw, yc), (cx, ym), (cx + hw, yc), 24)
+    lip, lip_d = pal["lip"], pal["lip_d"]
     if mo > 0.06:
-        poly = _S(up + lo)
-        mouth = Image.new("RGBA", im.size, (0, 0, 0, 0))
+        lw_ = my + mo * 52 + max(0, sm) * 10 + 4
+        lo = _bez((cx + hw, yc), (cx, lw_ + mo * 18 + 4), (cx - hw, yc), 24)
+        poly = up + lo
+        mouth = Image.new("RGBA", size, (0, 0, 0, 0))
         md = ImageDraw.Draw(mouth)
-        md.polygon(poly, fill=(74, 24, 32, 255))
-        # tongue
-        tg = _bez((cx - hw * 0.55, lw_ + 6), (cx, lw_ - 22 + mo * 8), (cx + hw * 0.55, lw_ + 6))
-        md.polygon(_S(tg + [(cx + hw * 0.5, lw_ + 30), (cx - hw * 0.5, lw_ + 30)]), fill=(222, 108, 116, 255))
-        # teeth
-        th = min(16, 6 + mo * 22)
-        md.polygon(_S(up + [(x, y + th) for x, y in reversed(up)]), fill=(252, 250, 246, 255))
-        mm = Image.new("L", im.size, 0)
-        ImageDraw.Draw(mm).polygon(poly, fill=255)
-        mouth.putalpha(Image.fromarray((np.array(mouth.getchannel("A"), np.float32) * (np.array(mm, np.float32) / 255)).astype(np.uint8)))
-        im.alpha_composite(mouth)
-        d = ImageDraw.Draw(im)
-        d.line(_S(up), fill=pal["lip"] + (255,), width=int(5 * SS), joint="curve")
-        d.line(_S(lo), fill=pal["lip"] + (255,), width=int(5 * SS), joint="curve")
+        _polyS(md, poly, (66, 20, 28, 255), S)
+        tg = _bez((cx - hw * 0.6, lw_ + 8), (cx, lw_ - 24 + mo * 10), (cx + hw * 0.6, lw_ + 8), 16)
+        tg_layer = Image.new("RGBA", size, (0, 0, 0, 0))
+        _polyS(ImageDraw.Draw(tg_layer), tg + [(cx + hw * 0.6, lw_ + 40), (cx - hw * 0.6, lw_ + 40)], (226, 112, 120, 255), S)
+        tg_layer = tg_layer.filter(ImageFilter.GaussianBlur(1.5 * S))
+        mouth.alpha_composite(tg_layer)
+        md = ImageDraw.Draw(mouth)
+        th = min(17, 6 + mo * 24)
+        teeth = up + [(x, y + th) for x, y in reversed(up)]
+        _polyS(md, teeth, (250, 248, 244, 255), S)
+        _polyS(md, [(x, y + th - 5) for x, y in up] + [(x, y + th) for x, y in reversed(up)], (226, 220, 214, 255), S)
+        mm = Image.new("RGBA", size, (0, 0, 0, 0))
+        _polyS(ImageDraw.Draw(mm), poly, (255, 255, 255, 255), S)
+        mouth = _clip_to(mouth, mm)
+        out.alpha_composite(mouth)
+        d = ImageDraw.Draw(out)
+        d.line([(x * S, y * S) for x, y in up], fill=lip_d + (255,), width=int(5.5 * S), joint="curve")
+        d.line([(x * S, y * S) for x, y in lo], fill=lip + (255,), width=int(6.5 * S), joint="curve")
     else:
-        d.line(_S(up), fill=pal["lip"] + (255,), width=int(7 * SS), joint="curve")
-        if sm > 0.6:
-            d.line(_S(_bez((cx - hw * 0.7, yc + 2), (cx, my + 14 + sm * 10), (cx + hw * 0.7, yc + 2))), fill=pal["lip"][:3] + (120,), width=int(3 * SS))
-    # sweat drop
+        d.line([(x * S, y * S) for x, y in up], fill=lip_d + (255,), width=int(6.5 * S), joint="curve")
+        if sm > 0.5:      # closed smile: soft lower lip
+            lo2 = _bez((cx + hw * 0.92, yc + 1), (cx, my + 22 + sm * 6), (cx - hw * 0.92, yc + 1), 20)
+            lipl = Image.new("RGBA", size, (0, 0, 0, 0))
+            _polyS(ImageDraw.Draw(lipl), up + lo2, lip + (150,), S)
+            out.alpha_composite(lipl.filter(ImageFilter.GaussianBlur(1.2 * S)))
+            d = ImageDraw.Draw(out)
+            d.line([(x * S, y * S) for x, y in up], fill=lip_d + (255,), width=int(6.5 * S), joint="curve")
+        for sx2 in (-1, 1):
+            _ellS(d, cx + sx2 * hw, yc, 3.2, 3.2, lip_d + (255,), S)
+
+    # ---------------------------------------------------------------- hair (front)
+    fr = [(-116, 10), (-128, -40), (-112, -102), (-66, -140), (-4, -154), (58, -148), (106, -122), (128, -68), (122, 8),
+          (108, -30), (96, -52), (70, -70), (32, -78), (-4, -72), (-48, -76), (-90, -44)]
+    frp = [(cx + x, cy + y) for x, y in _smooth(fr, 8)]
+    hr = Image.new("RGBA", size, (0, 0, 0, 0))
+    hd = ImageDraw.Draw(hr)
+    hd.polygon([(x * S, y * S) for x, y in frp], fill=hair + (255,))
+    for sx in (-1, 1):                               # sideburns
+        _polyS(hd, [(cx + sx * 124, cy + 4), (cx + sx * 112, cy + 52), (cx + sx * 100, cy + 14), (cx + sx * 102, cy - 40)], hair + (255,), S)
+    hr = pillow(hr, 18 * S, 0.55, light=(-0.4, -0.9), spec=0.5, sh_col=(6, 4, 6), hi_col=hair_l, down=6)
+    # soft highlight sweeping over the quiff
+    strk = Image.new("RGBA", size, (0, 0, 0, 0))
+    sd_ = ImageDraw.Draw(strk)
+    crv = _smooth([(cx - 84, cy - 112), (cx - 30, cy - 146), (cx + 40, cy - 148), (cx + 96, cy - 118)], 10, closed=False)
+    sd_.line([(x * S, y * S) for x, y in crv], fill=hair_l + (170,), width=int(15 * S), joint="curve")
+    strk = _clip_to(strk.filter(ImageFilter.GaussianBlur(4.5 * S)), hr)
+    hr.alpha_composite(strk)
+    # soft shadow of the fringe on the forehead
+    shadow = _soft((HW, HH), lambda dd: dd.polygon([(x, y + 9) for x, y in frp], fill=(110, 50, 40, 70)), 6, S)
+    out.alpha_composite(_clip_to(shadow, face))
+    out.alpha_composite(hr)
+
+    # ---------------------------------------------------------------- sweat
     if st["sweat"] > 0.03:
         k = st["sweat"]
-        tx, ty = cx + 104, cy - 70 + 18 * math.sin(st.get("_t", 0) * 2.2)
-        s = 0.6 + 0.4 * k
-        d.polygon(_S([(tx, ty - 26 * s), (tx - 13 * s, ty + 4 * s), (tx + 13 * s, ty + 4 * s)]), fill=(150, 214, 255, int(230 * k)))
-        _ell(d, tx, ty + 6 * s, 13 * s, 13 * s, (150, 214, 255, int(230 * k)))
-        _ell(d, tx - 4 * s, ty + 3 * s, 3.5 * s, 5 * s, (255, 255, 255, int(200 * k)))
+        tx, ty = cx + 106, cy - 66 + 20 * math.sin(st.get("_t", 0) * 2.2)
+        s_ = 0.62 + 0.38 * k
+        dr_ = ImageDraw.Draw(out)
+        _polyS(dr_, [(tx, ty - 28 * s_), (tx - 13 * s_, ty + 4 * s_), (tx + 13 * s_, ty + 4 * s_)], (140, 208, 255, int(235 * k)), S)
+        _ellS(dr_, tx, ty + 6 * s_, 13 * s_, 13 * s_, (140, 208, 255, int(235 * k)), S)
+        _ellS(dr_, tx - 4 * s_, ty + 3 * s_, 3.5 * s_, 5.5 * s_, (255, 255, 255, int(220 * k)), S)
+    return out
+
+
+def _hand(layer_d, pal, wrist, u, g, pa, S):
+    """hand in a local frame (wrist origin, u = forearm direction); g: 0 open, 1 fist, 2 point. returns centre of the hand"""
+    skin = pal["skin"] + (255,)
+    c, s_ = math.cos(math.radians(pa)), math.sin(math.radians(pa))
+    ux, uy = u[0] * c - u[1] * s_, u[0] * s_ + u[1] * c
+    vx, vy = -uy, ux
+
+    def P(a, b):
+        return (wrist[0] + ux * a + vx * b, wrist[1] + uy * a + vy * b)
+    if g == 1:     # fist
+        _capS(layer_d, P(6, 0), P(34, 0), 66, skin, S)
+        for k in (-1.5, -0.5, 0.5, 1.5):
+            _capS(layer_d, P(30, k * 15), P(44, k * 15), 17, skin, S)
+        _capS(layer_d, P(14, -30), P(38, -22), 20, skin, S)
+        return P(30, 0)
+    if g == 2:     # pointing
+        _capS(layer_d, P(6, 0), P(34, 0), 60, skin, S)
+        _capS(layer_d, P(30, -2), P(88, -2), 19, skin, S)
+        for k in (0.9, 1.9, 2.9):
+            _capS(layer_d, P(30, k * 13), P(46, k * 13), 16, skin, S)
+        _capS(layer_d, P(14, -28), P(40, -20), 20, skin, S)
+        return P(88, -2)
+    _capS(layer_d, P(4, 0), P(34, 0), 66, skin, S)      # open hand: palm + four fingers + thumb
+    for k, ln in ((-1.5, 36), (-0.5, 44), (0.5, 42), (1.5, 33)):
+        _capS(layer_d, P(30, k * 15.5), P(30 + ln, k * 15.5 + k * 2.5), 16.5, skin, S)
+    _capS(layer_d, P(12, -30), P(46, -46), 20, skin, S)
+    return P(50, 0)
+
+
+def _torso(pal, sx, sy, S, size):
+    jacket, jd, jl = pal["jacket"], pal["jacket_d"], pal["jacket_l"]
+    im = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    o = [(96, 820), (98, 560), (108, 466), (142, 418), (204, 390), (262, 376), (378, 376), (436, 390), (498, 418), (532, 466), (542, 560), (544, 820)]
+    outline = [(x + sx, y + sy) for x, y in _smooth(o, 8, closed=False)]
+    d.polygon([(x * S, y * S) for x, y in outline], fill=jacket + (255,))
+    im = pillow(im, 56 * S, 0.7, light=(-0.55, -0.8), spec=0.14, sh_col=(8, 8, 14), hi_col=jl, down=8)
+    # fabric weave + soft folds
+    rng = np.random.default_rng(7)
+    noise = rng.normal(0, 1, (size[1] // 6, size[0] // 6)).astype(np.float32)
+    noise = np.asarray(Image.fromarray(gaussian_filter(noise, 0.8)).resize(size, Image.BILINEAR), np.float32)
+    arr = _arr(im).copy()
+    arr[..., :3] = np.clip(arr[..., :3] * (1 + 0.045 * noise[..., None]), 0, 255)
+    im = Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+    def folds(dd):
+        for sgn in (-1, 1):
+            for (x0, y0, x1, y1) in ((152, 560, 176, 700), (176, 520, 196, 640)):
+                xx0, xx1 = (320 + sgn * (320 - x0) + sx), (320 + sgn * (320 - x1) + sx)
+                dd.line([(xx0, y0 + sy), (xx1, y1 + sy)], fill=(0, 0, 0, 70), width=7)
+        dd.ellipse([210 + sx, 470 + sy, 262 + sx, 560 + sy], fill=(255, 255, 255, 14))
+    fl = _soft((size[0] // S, size[1] // S), folds, 7, S)
+    im.alpha_composite(_clip_to(fl, im))
     return im
 
 
+_BODY = {}
+
+
+def _body_cached(pal, S, size):
+    k = (id(pal), S)
+    if k not in _BODY:
+        _BODY[k] = _body(pal, S, size)
+    return _BODY[k]
+
+
+def _body(pal, S, size):
+    """torso + neck + shirt + lapels + tie, rendered once at rest (shifted per frame by lean / bob)"""
+    sx, sy = OX, 0
+    shirt, shd = pal["shirt"], pal["shirt_d"]
+    jacket, jd, jl = pal["jacket"], pal["jacket_d"], pal["jacket_l"]
+    tie, tie_d = pal["tie"], pal["tie_d"]
+    im = Image.new("RGBA", size, (0, 0, 0, 0))
+    im.alpha_composite(_torso(pal, sx, sy, S, size))
+    # ------------------------------------------------------------ neck
+    neck = Image.new("RGBA", size, (0, 0, 0, 0))
+    nd = ImageDraw.Draw(neck)
+    nd.rounded_rectangle([(272 + sx) * S, (292 + sy) * S, (368 + sx) * S, (404 + sy) * S], radius=int(34 * S), fill=pal["skin_d"] + (255,))
+    neck = pillow(neck, 22 * S, 0.5, spec=0.1, sh_col=(120, 60, 50), down=4)
+    im.alpha_composite(neck)
+    # ------------------------------------------------------------ shirt, collar, lapels, tie
+    d = ImageDraw.Draw(im)
+    v = Image.new("RGBA", size, (0, 0, 0, 0))
+    vd = ImageDraw.Draw(v)
+    _polyS(vd, [(254 + sx, 378 + sy), (386 + sx, 378 + sy), (320 + sx, 580 + sy)], shirt + (255,), S)
+    v = pillow(v, 40 * S, 0.45, light=(-0.2, -1.0), sh_col=shd, down=6)
+    im.alpha_composite(v)
+    lap = Image.new("RGBA", size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(lap)
+    for sg in (-1, 1):
+        def X(x):
+            return 320 + sg * (320 - x) + sx
+        _polyS(ld, [(X(232), 388 + sy), (X(262), 376 + sy), (X(320), 580 + sy), (X(268), 534 + sy), (X(222), 462 + sy), (X(246), 430 + sy)], jl + (255,), S)
+    lap = pillow(lap, 14 * S, 0.5, light=(-0.4, -0.9), spec=0.22, sh_col=jd, hi_col=(150, 158, 182), down=4)
+    im.alpha_composite(lap)
+    d = ImageDraw.Draw(im)
+    for sg in (-1, 1):                          # lapel edge stitching
+        def X(x):
+            return 320 + sg * (320 - x) + sx
+        d.line([(X(240) * S, (392 + sy) * S), (X(300) * S, (540 + sy) * S)], fill=(130, 138, 162, 120), width=int(2.2 * S))
+        _polyS(d, [(X(254), 374 + sy), (X(298), 390 + sy), (X(320), 446 + sy), (X(268), 420 + sy)], shirt + (255,), S)     # collar wings
+        d.line([(X(254) * S, (374 + sy) * S), (X(268) * S, (420 + sy) * S), (X(320) * S, (446 + sy) * S)], fill=shd + (255,), width=int(2.2 * S))
+    # tie (satin)
+    tl = Image.new("RGBA", size, (0, 0, 0, 0))
+    td = ImageDraw.Draw(tl)
+    _polyS(td, [(302 + sx, 396 + sy), (338 + sx, 396 + sy), (344 + sx, 420 + sy), (296 + sx, 420 + sy)], tie + (255,), S)
+    _polyS(td, [(298 + sx, 420 + sy), (342 + sx, 420 + sy), (358 + sx, 548 + sy), (320 + sx, 584 + sy), (282 + sx, 548 + sy)], tie + (255,), S)
+    tl = pillow(tl, 12 * S, 0.7, light=(-0.9, -0.3), spec=0.55, sh_col=tie_d, hi_col=(255, 240, 190), down=4)
+    td = ImageDraw.Draw(tl)
+    tl = _clip_to(tl, tl)
+    im.alpha_composite(tl)
+    # pocket square
+    d = ImageDraw.Draw(im)
+    _polyS(d, [(436 + sx, 500 + sy), (478 + sx, 494 + sy), (470 + sx, 520 + sy), (452 + sx, 508 + sy), (440 + sx, 520 + sy)], (250, 244, 232, 255), S)
+    _polyS(d, [(440 + sx, 520 + sy), (452 + sx, 508 + sy), (470 + sx, 520 + sy)], tie + (255,), S)
+
+    return im
+
+
+_HEADC = {}
+
+
+def _head_resized(st, pal, mouth_open, t, HSC, S):
+    """head layer rendered at the supersampled size and cached by a quantised expression key (a few hundred distinct heads per video)"""
+    def q(v, m):
+        return round(v / m) * m
+    key = (id(pal), q(st["brow"], .04), q(st["tilt"], .05), q(st["asym"], .05), q(st["eo"], .06), q(st["wink"], .1), q(st["lx"], .08), q(st["ly"], .08),
+           q(st["smile"], .05), q(st["mw"], .05), q(st["blush"], .08), q(st["sweat"], .1), q(mouth_open, .06), int(t * 8) if st["sweat"] > 0.03 else 0)
+    h = _HEADC.get(key)
+    if h is None:
+        if len(_HEADC) > 600:
+            _HEADC.clear()
+        st2 = dict(st)
+        st2["_t"] = t
+        h = _head(st2, pal, mouth_open)
+        hw_, hh_ = h.size
+        h = h.resize((int(hw_ * HSC * S / HS), int(hh_ * HSC * S / HS)), Image.LANCZOS)
+        _HEADC[key] = h
+    return h
+
+
 def draw_char(st, pal, t=0.0, mouth_open=0.0):
-    """returns (RGBA layer CW x CH, anchors in local coords)"""
+    """returns (RGBA layer LW x CH, anchors in local coords)"""
     st = dict(st)
     st["_t"] = t
-    im = Image.new("RGBA", (LW * SS, CH * SS), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
+    S = BS
+    size = (LW * S, CH * S)
     lean = st["lean"]
     sx, sy = lean + OX, st["bob"]
-    jacket, jd, jl = pal["jacket"] + (255,), pal["jacket_d"] + (255,), pal["jacket_l"] + (255,)
-    shirt, shd = pal["shirt"] + (255,), pal["shirt_d"] + (255,)
-    # torso
-    d.rounded_rectangle([(120 + sx) * SS, (380 + sy) * SS, (520 + sx) * SS, 800 * SS], radius=int(96 * SS), fill=jacket)
-    hl = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    hd = ImageDraw.Draw(hl)
-    hd.rounded_rectangle([(122 + sx) * SS, (382 + sy) * SS, (518 + sx) * SS, 800 * SS], radius=int(94 * SS), outline=jl[:3] + (90,), width=int(4 * SS))
-    _ell(hd, 400 + sx, 440 + sy, 110, 60, jl[:3] + (46,))
-    im.alpha_composite(hl.filter(ImageFilter.GaussianBlur(3 * SS)))
-    d = ImageDraw.Draw(im)
-    # neck + shirt V + collar + tie
-    d.rounded_rectangle([(274 + sx) * SS, (296 + sy) * SS, (366 + sx) * SS, (396 + sy) * SS], radius=int(30 * SS), fill=pal["skin_d"] + (255,))
-    d.polygon(_S([(256 + sx, 380 + sy), (384 + sx, 380 + sy), (320 + sx, 560 + sy)]), fill=shirt)
-    d.polygon(_S([(256 + sx, 380 + sy), (300 + sx, 392 + sy), (320 + sx, 440 + sy), (268 + sx, 424 + sy)]), fill=shd)
-    d.polygon(_S([(384 + sx, 380 + sy), (340 + sx, 392 + sy), (320 + sx, 440 + sy), (372 + sx, 424 + sy)]), fill=shirt)
-    d.polygon(_S([(234 + sx, 392 + sy), (276 + sx, 380 + sy), (320 + sx, 560 + sy), (252 + sx, 470 + sy)]), fill=jd)
-    d.polygon(_S([(406 + sx, 392 + sy), (364 + sx, 380 + sy), (320 + sx, 560 + sy), (388 + sx, 470 + sy)]), fill=jd)
-    tie, tie_d = pal["tie"] + (255,), pal["tie_d"] + (255,)
-    d.polygon(_S([(304 + sx, 398 + sy), (336 + sx, 398 + sy), (342 + sx, 420 + sy), (298 + sx, 420 + sy)]), fill=tie)
-    d.polygon(_S([(300 + sx, 420 + sy), (340 + sx, 420 + sy), (354 + sx, 540 + sy), (320 + sx, 572 + sy), (286 + sx, 540 + sy)]), fill=tie)
-    d.polygon(_S([(320 + sx, 420 + sy), (340 + sx, 420 + sy), (354 + sx, 540 + sy), (320 + sx, 572 + sy)]), fill=tie_d)
-    # head
+    shirt, shd = pal["shirt"], pal["shirt_d"]
+    jacket, jd, jl = pal["jacket"], pal["jacket_d"], pal["jacket_l"]
+    tie, tie_d = pal["tie"], pal["tie_d"]
+
+    im = Image.new("RGBA", size, (0, 0, 0, 0))
+    im.paste(_body_cached(pal, S, size), (int(round(lean * S)), int(round(st["bob"] * S))))
+    shirt, shd, tie, tie_d = pal["shirt"], pal["shirt_d"], pal["tie"], pal["tie_d"]
+    sx, sy = lean + OX, st["bob"]
+    neck = Image.new("RGBA", size, (0, 0, 0, 0))
+    nd = ImageDraw.Draw(neck)
+    nd.rounded_rectangle([(272 + sx) * S, (292 + sy) * S, (368 + sx) * S, (404 + sy) * S], radius=int(34 * S), fill=(0, 0, 0, 255))
+    # ------------------------------------------------------------ head
     hcx, hcy = 320 + sx + st["head_dx"], 222 + sy + st["head_dy"]
-    head = _head(st, pal, mouth_open)
-    HS = 1.2
-    head = head.resize((int(head.width * HS), int(head.height * HS)), Image.BICUBIC)
+    HSC = 1.2
+    head = _head_resized(st, pal, mouth_open, t, HSC, S)
     tilt = st["head_tilt"]
     if abs(tilt) > 0.05:
-        head = head.rotate(-tilt, resample=Image.BICUBIC, center=(190 * SS * HS, 300 * SS * HS))
-    # chin shadow on neck
-    sd = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    _ell(ImageDraw.Draw(sd), 320 + sx, 360 + sy, 70, 22, (60, 30, 20, 120))
-    im.alpha_composite(sd.filter(ImageFilter.GaussianBlur(8 * SS)))
-    im.alpha_composite(head, (int((hcx - 190 * HS) * SS), int((hcy - 190 * HS - 8) * SS)))
-    d = ImageDraw.Draw(im)
-    # arms
+        head = head.rotate(-tilt, resample=Image.BICUBIC, center=(190 * HSC * S, 300 * HSC * S))
+    sd = _soft((LW, CH), lambda dd: dd.ellipse([320 + sx - 76, 350 + sy, 320 + sx + 76, 392 + sy], fill=(40, 16, 12, 170)), 8, S)
+    im.alpha_composite(_clip_to(sd, neck))
+    im.alpha_composite(head, (int((hcx - 190 * HSC) * S), int((hcy - 190 * HSC - 8) * S)))
+
+    # ------------------------------------------------------------ arms (volumetric sleeves + hands)
     anchors = {"head": (hcx, hcy)}
-    for side, shx, hxk, hyk, gk, pk in ((-1, 175, "lhx", "lhy", "lg", "lpa"), (1, 465, "rhx", "rhy", "rg", "rpa")):
-        S = (shx + sx, 412 + sy)
+    for side, shx, hxk, hyk, gk, pk in ((-1, 188, "lhx", "lhy", "lg", "lpa"), (1, 452, "rhx", "rhy", "rg", "rpa")):
+        Sh = (shx + sx, 446 + sy)
         T = (st[hxk] + OX + lean * 0.3, st[hyk])
-        E, Wp = _ik(S, T, 172, 160, side, 320 + OX)
-        _cap(d, S, E, 70, jacket)
-        _cap(d, E, Wp, 64, jacket)
+        E, Wp = _ik(Sh, T, 180, 168, side, 320 + OX)
+        arm = Image.new("RGBA", size, (0, 0, 0, 0))
+        ad = ImageDraw.Draw(arm)
+        _capS(ad, Sh, E, 72, jacket + (255,), S)
+        _capS(ad, E, Wp, 64, jacket + (255,), S)
+        arm = pillow(arm, 20 * S, 0.62, light=(-0.55, -0.8), spec=0.16, sh_col=(6, 6, 12), hi_col=jl, down=4)
+        # elbow crease
+        crease = _soft((LW, CH), lambda dd: dd.ellipse([E[0] - 20, E[1] - 8, E[0] + 20, E[1] + 24], fill=(0, 0, 0, 80)), 6, S)
+        arm.alpha_composite(_clip_to(crease, arm))
+        im.alpha_composite(arm)
         fd = (Wp[0] - E[0], Wp[1] - E[1])
         fl = math.hypot(*fd) or 1.0
-        ux, uy = fd[0] / fl, fd[1] / fl
-        cuff0 = (Wp[0] - ux * 14, Wp[1] - uy * 14)
-        _cap(d, cuff0, (Wp[0] + ux * 4, Wp[1] + uy * 4), 62, shirt)
+        u = (fd[0] / fl, fd[1] / fl)
+        d = ImageDraw.Draw(im)
+        cuff = Image.new("RGBA", size, (0, 0, 0, 0))
+        cd = ImageDraw.Draw(cuff)
+        _capS(cd, (Wp[0] - u[0] * 16, Wp[1] - u[1] * 16), (Wp[0] + u[0] * 6, Wp[1] + u[1] * 6), 62, shirt + (255,), S)
+        cuff = pillow(cuff, 8 * S, 0.5, sh_col=shd, down=3)
+        im.alpha_composite(cuff)
+        d = ImageDraw.Draw(im)
+        cl = (Wp[0] - u[1] * 20 * side * -1 + u[0] * -4, Wp[1] + u[0] * 20 * side * -1 + u[1] * -4)
+        _ellS(d, cl[0], cl[1], 5, 5, tie + (255,), S)
+        hand = Image.new("RGBA", size, (0, 0, 0, 0))
+        hd = ImageDraw.Draw(hand)
         g = int(round(st[gk]))
-        pa = math.radians(st[pk])
-        hx0, hy0 = Wp[0] + ux * 6, Wp[1] + uy * 6
-        c, s_ = math.cos(pa), math.sin(pa)
-        vx, vy = ux * c - uy * s_, ux * s_ + uy * c
-        skin = pal["skin"] + (255,)
-        if g == 2:        # pointing finger
-            _cap(d, (hx0, hy0), (hx0 + vx * 34, hy0 + vy * 34), 52, skin)
-            _cap(d, (hx0 + vx * 20, hy0 + vy * 20), (hx0 + vx * 82, hy0 + vy * 82), 20, skin)
-            hc = (hx0 + vx * 82, hy0 + vy * 82)
-        elif g == 1:      # fist
-            _cap(d, (hx0, hy0), (hx0 + vx * 28, hy0 + vy * 28), 62, skin)
-            hc = (hx0 + vx * 22, hy0 + vy * 22)
-            d.arc([(hc[0] - 24) * SS, (hc[1] - 24) * SS, (hc[0] + 24) * SS, (hc[1] + 24) * SS], 0, 360, fill=pal["skin_d"] + (255,), width=int(3 * SS))
-        else:             # open hand (mitten + thumb + finger hint)
-            _cap(d, (hx0, hy0), (hx0 + vx * 46, hy0 + vy * 46), 66, skin)
-            nx, ny = -vy * side, vx * side
-            _cap(d, (hx0 + vx * 14 + nx * 26, hy0 + vy * 14 + ny * 26), (hx0 + vx * 46 + nx * 34, hy0 + vy * 46 + ny * 34), 24, skin)
-            hc = (hx0 + vx * 40, hy0 + vy * 40)
-        anchors["hand_l" if side < 0 else "hand_r"] = (hc[0], hc[1], vx, vy)
+        hc = _hand(hd, pal, (Wp[0] + u[0] * 6, Wp[1] + u[1] * 6), u, g, st[pk], S)
+        hand = pillow(hand, 7 * S, 0.34, spec=0.25, sh_col=pal["skin_d"], hi_col=pal["skin_l"], down=3)
+        im.alpha_composite(hand)
+        anchors["hand_l" if side < 0 else "hand_r"] = (hc[0], hc[1], u[0], u[1])
+
     out = im.resize((LW, CH), Image.LANCZOS)
-    # warm rim light on the right edge
     a = np.array(out.getchannel("A"), np.float32) / 255.0
-    k = 6
-    sh_ = np.roll(a, -k, axis=1)
-    sh_[:, -k:] = 0
-    rim = np.clip(a - sh_, 0, 1) * 0.65 * st["rim"]
-    rim = np.array(Image.fromarray((rim * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2)), np.float32) / 255.0
     arr = np.array(out, np.float32)
-    rc = np.array(pal["rim"], np.float32)
-    arr[..., :3] = arr[..., :3] * (1 - rim[..., None]) + rc * rim[..., None]
-    ramp = np.clip((CH - np.arange(CH, dtype=np.float32)) / 110.0, 0, 1)[:, None]
+    # key light from the upper-left, soft vertical falloff
+    yy = np.linspace(1.10, 0.86, CH, dtype=np.float32)[:, None]
+    xx = np.linspace(1.04, 0.94, LW, dtype=np.float32)[None, :]
+    arr[..., :3] = np.clip(arr[..., :3] * (yy * xx)[..., None], 0, 255)
+    # rim lights: warm on the right, cool on the left
+    for sgn, col, k_, amt in ((1, np.array(pal["rim"], np.float32), 7, 0.7 * st["rim"]), (-1, np.array(pal["rim2"], np.float32), 6, 0.38 * st["rim"])):
+        sh_ = np.roll(a, -k_ * sgn, axis=1)
+        if sgn > 0:
+            sh_[:, -k_:] = 0
+        else:
+            sh_[:, :k_] = 0
+        rim = np.clip(a - sh_, 0, 1) * amt
+        rim = np.array(Image.fromarray((rim * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.3)), np.float32) / 255.0
+        arr[..., :3] = arr[..., :3] * (1 - rim[..., None]) + col * rim[..., None]
+    ramp = np.clip((CH - np.arange(CH, dtype=np.float32)) / 120.0, 0, 1)[:, None]
     arr[..., 3] = arr[..., 3] * ramp
-    out = Image.fromarray(arr.astype(np.uint8), "RGBA")
-    return out, anchors
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA"), anchors
 
 
 # ----------------------------------------------------------------------------- the animated host
 class Host:
     def __init__(self, track, env=None, palette="ali", blinks=(0.9, 3.45, 5.8, 8.7, 11.6, 15.1, 18.0, 21.0, 23.9),
-                 mods=(), props=(), halo=True, mouth_gain=1.0):
+                 mods=(), props=(), halo=True, mouth_gain=1.0, gscale=1.0, gdy=0.0):
         self.keys = []
         for k in track:
             t, ex, ov = k[0], k[1], (k[2] if len(k) > 2 else {})
@@ -373,6 +683,7 @@ class Host:
         self.props = list(props)
         self.halo = halo
         self.mg = mouth_gain
+        self.gscale, self.gdy = gscale, gdy
         self.anchors = {}
         self._halo = None
 
@@ -426,8 +737,8 @@ class Host:
         al = st["al"]
         if al <= 0.01:
             return
-        sc = st["sc"]
-        cx, by = st["cx"], st["by"] + st["rise"]
+        sc = st["sc"] * self.gscale
+        cx, by = st["cx"], st["by"] + st["rise"] + self.gdy
         cy = by - CH * sc / 2
         if self.halo:
             put(cv, self._halo_layer(), cx, cy - 60 * sc, al * 0.55, 1.0 * sc * 1.1)
