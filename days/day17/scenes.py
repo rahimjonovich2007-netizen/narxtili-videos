@@ -300,7 +300,7 @@ def build(tim, env=None):
                 txt = lab_
         put(cv, calc_screen(txt), gx, gy + (1 - k) * 300 * sc, al * fo * clamp(k * 2), sc, -5)
 
-    host = Host(track, env=env, mods=mods, props=[p_calc])
+    host = Host(track, env=env, mods=mods, props=[p_calc], gscale=1.12, gdy=48)
 
     # ---------------- A. hook (question + thought bubble with the rolling "days" ring)
     def sc_hook(cv, t):
@@ -510,9 +510,9 @@ def build(tim, env=None):
             pop(cv, GG("NECHA OY?", 150, 22, 1.2), CX, 760, t, 22.342, 0.42, al)
         if t >= 22.9:
             pill = card(760, 92, 46, 30, 120, 20, 10, 0.5)
-            pop(cv, pill, CX, 1295, t, 22.9, 0.3, al)
-            put(cv, plane_icon(50), 250, 1295, al * clamp((t - 22.9) / 0.3))
-            pop(cv, X("Do'stingga ham yubor", 44, (250, 246, 236), 600, "b"), 590, 1295, t, 22.9, 0.3, al)
+            pop(cv, pill, CX, 1322, t, 22.9, 0.3, al)
+            put(cv, plane_icon(50), 250, 1322, al * clamp((t - 22.9) / 0.3))
+            pop(cv, X("Do'stingga ham yubor", 44, (250, 246, 236), 600, "b"), 590, 1322, t, 22.9, 0.3, al)
 
     cam = (Cam(1.04).key(2.8, 1.07, 0, 20).key(6.2, 1.05, 0, -6).key(7.7, 1.07).key(10.4, 1.04).key(11.0, 1.10)
            .key(12.9, 1.06).key(14.2, 1.05, 0, 12).key(17.3, 1.07, -14, 0).key(20.2, 1.04).key(24.4, 1.10))
@@ -535,6 +535,8 @@ def build(tim, env=None):
     return PremiumReel(tim, [host_back, sc_hook, sc_bills, sc_one, sc_calc, sc_vault, host_front, sc_auto, sc_calm, sc_cta], world="gold", cam=cam,
                        seed=17, bokeh_n=44, vignette=0.55, grain=0.45, bloom=0.30, tint=tint,
                        flashes=[(6.15, 0.12), (12.4, 0.22)], chroma_at=[(3.207, 14, 0.35), (6.15, 12, 0.25), (11.015, 10, 0.3)],
+                       whips=[(2.78, 0.30, 90, 90), (6.15, 0.26, 110, 90), (7.62, 0.26, 80, 0), (10.45, 0.28, 90, 90), (14.15, 0.30, 100, 0), (17.3, 0.28, 90, 0), (20.2, 0.30, 90, 90)],
+                       sweeps=[(7.5, 0.55), (14.05, 0.6), (19.1, 0.7)],
                        top=[caps], disclaimer="Bu umumiy ma‘lumot, shaxsiy maslahat emas.")
 
 
@@ -544,7 +546,7 @@ def sfx(tim):
     ev = [(0.02, "whoosh", 0.55)]
     ev += [(0.1 + i * 0.11, "tick", 0.30) for i in range(22)]
     ev += [(2.58, "thump", 0.95), (2.78, "whoosh", 0.5), (3.207, "stamp", 0.95), (3.207, "glitch", 0.5)]
-    ev += [(4.306, "whoosh", 0.4), (4.4, "pop", 0.7), (4.806, "pop", 0.7), (5.207, "pop", 0.7)]
+    ev += [(7.5, "whoosh", 0.35), (4.306, "whoosh", 0.4), (4.4, "pop", 0.7), (4.806, "pop", 0.7), (5.207, "pop", 0.7)]
     ev += [(6.1, "whoosh_dn", 0.5), (6.3, "pop", 0.7), (6.906, "ding", 0.55)]
     ev += [(8.082, "pop", 0.5), (8.40, "pop", 0.5), (8.72, "pop", 0.5), (9.04, "pop", 0.5)]
     ev += [(9.15 + i * 0.07, "tick", 0.25) for i in range(8)] + [(9.82, "coin", 0.8), (10.0, "coin", 0.6)]
