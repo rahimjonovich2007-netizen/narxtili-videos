@@ -5,3 +5,4 @@ story/**/work/
 story/**/out/
 story/**/in/url_*.txt
 story/**/in/*.wav
+story/voicetest/
