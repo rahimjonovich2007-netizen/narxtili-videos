@@ -1,5 +1,7 @@
 # Narx Tili: video ishlab chiqarish protokoli (@narxtili)
 
+> **BEKOR QILINGAN (2026-11-26):** Narx Tili loyihasi egasi (Yodgorbek) qaroriga ko'ra to'xtatildi. Rejalashtirilgan vazifalar o'chirilgan/o'chirib qo'yilgan, Metricool'dagi Kun 19 posti qoralamaga o'tkazilgan. Quyidagi protokol faqat arxiv sifatida saqlanadi. Yangi loyiha: `story/` (Sirli hikoyalar).
+
 Bu repo **Narx Tili** (@narxtili, oddiy tilda iqtisod va marketing) Instagram akkaunti uchun har 2 kunda bitta Reels tayyorlaydigan ishlab chiqarish kiti va arxivi.
 Ish tili: o'zbek (lotin). Egasi: Yodgorbek. Repo OCHIQ (public): Metricool videoni `raw.githubusercontent.com` havolasidan oladi, shuning uchun hech qanday maxfiy ma'lumot, parol yoki token yozilmaydi.
 
