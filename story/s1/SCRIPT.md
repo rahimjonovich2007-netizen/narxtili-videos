@@ -23,7 +23,7 @@ Dialog qatorlari `> Kim: matn` ko'rinishida (so'z hisobi uchun).
 
 ## 1-qism · "To'xtagan soat" (hook: 3 s)
 
-**Sahna 1 (0–8 s)** Tungi minora siluet, oy. Milya "tak" bilan to'xtaydi. Sarlavha: SIRLI MAHALLA · SOAT 03:07 · 1/4.
+**Sahna 1 (0–8 s)** Tungi minora siluet, oy. Milya "tak" bilan to'xtaydi. Sarlavha: SIRLI HIKOYALAR · SOAT 03:07 · 1/4.
 > Hikoyachi: Soat har tun 03:07 da to'xtaydi.
 > Hikoyachi: Bir oydan beri. Hech kim sababini bilmaydi.
 

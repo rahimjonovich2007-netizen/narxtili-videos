@@ -1,9 +1,9 @@
-# SIRLI MAHALLA — seriya "bible"i (qoralama v1)
+# SIRLI HIKOYALAR — seriya "bible"i (qoralama v2)
 
-> Yangi loyiha (Narx Tili loyihasi to'xtatilgan). 30 kun · har kuni 1 qism · 45–60 soniya · o'zbek tilida · jumboq/sir janri · yangi Instagram akkaunt.
+> Yangi loyiha (Narx Tili bekor qilingan). Instagram: sirli.xikoyalar_ai. Joylash: har kuni 18:00 Toshkent. 30 kun · har kuni 1 qism · 45–60 soniya · o'zbek tilida · jumboq/sir janri · yangi Instagram akkaunt.
 
 ## 1. G'oya bir gapda
-Chinor mahallasida har tun g'alati narsalar yuz beradi. Ikki o'smir — kuzatuvchi Jasur va muhandis Malika — mushuk Tuman bilan "daliillar"ni yig'ib, sirni 4 qismda yechadi. Har qism **klifhanger** bilan tugaydi, har hikoya oxirida **yangi sirning uchquni** bor.
+Har hikoya yangi joyda (mahalla, maktab, bozor, vokzal, kutubxona, qishloq) bo'ladi; o'zgarmaydigani Jasur, Malika va Tuman. Birinchi hikoya Chinor mahallasida: u yerda har tun g'alati narsalar yuz beradi. Ikki o'smir — kuzatuvchi Jasur va muhandis Malika — mushuk Tuman bilan "daliillar"ni yig'ib, sirni 4 qismda yechadi. Har qism **klifhanger** bilan tugaydi, har hikoya oxirida **yangi sirning uchquni** bor.
 
 ## 2. Nega bu tuzilma o'sadi (Instagram mantig'i)
 - **Ketma-ket qism = qaytib keladigan tomoshabin.** "2-qism ertaga 18:00" — obuna bo'lish uchun sabab.
@@ -13,12 +13,12 @@ Chinor mahallasida har tun g'alati narsalar yuz beradi. Ikki o'smir — kuzatuvc
 - Eski loyihadan olingan saboq: 1–2 obunachi bilan muammo ishlab chiqarish emas, **tarqatish**. Shuning uchun har qismda ulashishga sabab (jumboq), Trial Reels, qismlar o'rtasida o'zaro havola.
 
 ## 3. Dunyo va uslub
-- **Joy:** xayoliy "Chinor mahallasi" — eski soat minorasi, soatsoz ustaxona, tandirli non do'koni, chinor daraxti, kutubxona.
+- **Joy:** har hikoyada yangi joy. 1-hikoya: xayoliy "Chinor mahallasi" (eski soat minorasi, soatsoz ustaxona, tandirli non do'koni, chinor daraxti).
 - **Palitra:** tungi indigo + issiq qahrabo (chiroq nuri), alohida dalil uchun firozarang aksent. Premium nur, bokeh, ovozli hajmli yorug'lik (Narx Tili kit'dagi PremiumReel).
 - **Animatsiya:** 2D, kod bilan chizilgan (PIL/numpy → ffmpeg 1080×1920@30), kamera siljishi, parallaks, lip-sync (ovoz → og'iz ochilishi), ko'z qisish, qo'l IK.
 - **Epizod qolipi (50 s):**
   1. 0–3 s: HOOK (yarim ochilgan sir, bitta jumla)
-  2. 3–8 s: "SIRLI MAHALLA · n-hikoya · k/4" sarlavha + 1 jumlalik eslatma (2–4-qismlarda)
+  2. 3–8 s: "SIRLI HIKOYALAR · n-hikoya · k/4" sarlavha + 1 jumlalik eslatma (2–4-qismlarda)
   3. 8–40 s: 2–3 sahna, kamida **1 yangi DALIL** (ekranda karta)
   4. 40–48 s: burilish → klifhanger (freeze-frame)
   5. 48–50 s: savol + "keyingi qism ertaga 18:00"

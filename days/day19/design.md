@@ -1,7 +1,0 @@
-Kun 19: "Bepul" effekti (Marketing). PREMIUM uslub + animatsiyali personaj (host).
-Dunyo: "neon" (binafsha-ko'k aurora, bokeh, kino grain), kamera doim harakatda, ~90 ta ovoz effekti (sfx.py), musiqa: pluck 104 bpm, D Bm G A, seed 97.
-Hook jumboq: "Nega 'bepul' sehrli?" -> sovg'a qutisi magnit kabi odamlarni (yuzlarni) o'ziga tortadi, shpagatda "0" narx yorlig'i.
-Metafora: sovg'a qutisi (0 narx = magnit) -> "BEPUL SINOV" chiptasi qizil XAVF yorlig'ini yo'qotadi -> hamyondan tangalar ketadi (qo'rquv), narx 0 bo'lganda tangalar qoladi, "YO'QOTISH: 0" -> TAJRIBA: shokolad, narx yorlig'i 2 sent -> 1 sent (TALAB shkalasi deyarli qimirlamaydi, "≈") -> 0 (shkala keskin sakraydi, olomon yuguradi) -> ESHIK: bepul odam kiradi, xona bo'sh ("?"), chiqib ketadi; "QIYMAT" (olmos) paydo bo'lganda qaytib qoladi -> "BEPUL -> ESHIK / QIYMAT -> QOLISH SABABI" -> do'stga samolyot (do'kon), izoh savoli, OBUNA tugmasi + qo'ng'iroq.
-Personaj (kit/nt_char.py Host, yangi libos: teal kamzul, pushti galstuk, neon yorug'lik): o'ylaydi -> hayratda -> xavotir -> yengillik -> o'ylaydi (shokolad) -> "yo'q" -> shok -> qo'llar tepada (sakrash) -> xavotir (odam ketadi) -> hayrat -> ko'rsatadi -> ko'z qisib obunaga chaqiradi; lablari ovozga mos.
-Manba: Shampanier, Mazar va Ariely (2007), Marketing Science 26(6), 742-757 ("Zero as a Special Price"). Ekranda "TAJRIBA" belgisi va muallif/yil.
-Post vaqti: 26-noy 18:00 (Metricool: payshanba ish kuni 10:00 va 18:00 cho'qqilar; hisob ma'lumoti kam; 19:30 dagi 3 ta video 117-153 ko'rish olgan, 18:00 dagi Kun 17 hali kam).
