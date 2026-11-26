@@ -1,0 +1,98 @@
+[
+ {
+  "n": "01",
+  "spk": "hik",
+  "text": "Soat har tun aynan uch nol yetida to'xtaydi.",
+  "file": "in/line_01_hik.wav",
+  "dur": 6.27,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "02",
+  "spk": "hik",
+  "text": "Bir oydan beri. Hech kim sababini bilmaydi.",
+  "file": "in/line_02_hik.wav",
+  "dur": 6.77,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "03",
+  "spk": "jasur",
+  "text": "O'ttiz bir tun. Har safar bir xil: uch, nol, yetti.",
+  "file": "in/line_03_jasur.wav",
+  "dur": 4.3,
+  "prov": "google-tts/gemini-3.8-flash-tts (earlier check)"
+ },
+ {
+  "n": "04",
+  "spk": "malika",
+  "text": "Hilola xola arvoh deydi. Men esa mexanizm deyman.",
+  "file": "in/line_04_malika.wav",
+  "dur": 4.1,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "05",
+  "spk": "jasur",
+  "text": "Bugun tunda o'zimiz ko'ramiz. Birga borasanmi?",
+  "file": "in/line_05_jasur.wav",
+  "dur": 2.5,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "06",
+  "spk": "malika",
+  "text": "Borganda ham jim bo'l. Ovozingni pasaytir.",
+  "file": "in/line_06_malika.wav",
+  "dur": 2.86,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "07",
+  "spk": "jasur",
+  "text": "Tuman?! Bu kalit qayerdan?",
+  "file": "in/line_07_jasur.wav",
+  "dur": 2.91,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "08",
+  "spk": "malika",
+  "text": "Yetti. Qara, kalitda yetti raqami yozilgan.",
+  "file": "in/line_08_malika.wav",
+  "dur": 4.69,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "09",
+  "spk": "malika",
+  "text": "Qara! Minoraning tepasida chiroq yondi.",
+  "file": "in/line_09_malika.wav",
+  "dur": 3.43,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "10",
+  "spk": "jasur",
+  "text": "Soat... uch nol yetti.",
+  "file": "in/line_10_jasur.wav",
+  "dur": 4.75,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "11",
+  "spk": "notanish",
+  "text": "Yettinchi kalit... nihoyat keldi.",
+  "file": "in/line_11_notanish.wav",
+  "dur": 6.32,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ },
+ {
+  "n": "12",
+  "spk": "hik",
+  "text": "Sizningcha, bu kim? Izohda yozing. Ikkinchi qism, ertaga kechqurun oltida.",
+  "file": "in/line_12_hik.wav",
+  "dur": 8.19,
+  "prov": "google-tts/gemini-3.8-flash-tts"
+ }
+]

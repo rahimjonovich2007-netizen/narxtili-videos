@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+# Sirli Hikoyalar: heavy/temporary episode files
+story/**/work/
+story/**/out/
+story/**/in/url_*.txt
+story/**/in/*.wav

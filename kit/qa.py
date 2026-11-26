@@ -29,7 +29,7 @@ num, den = v["r_frame_rate"].split("/")
 check("video H.264 High yuv420p 1080x1920 30fps", v["codec_name"] == "h264" and v["pix_fmt"] == "yuv420p" and v["width"] == 1080
       and v["height"] == 1920 and abs(int(num) / int(den) - 30) < 0.01, f'{v["codec_name"]} {v["profile"]} {v["pix_fmt"]} {v["width"]}x{v["height"]} {num}/{den}')
 check("audio AAC 48 kHz stereo", a["codec_name"] == "aac" and int(a["sample_rate"]) == 48000 and a["channels"] == 2, f'{a["codec_name"]} {a["sample_rate"]} ch{a["channels"]}')
-check("duration 15-45 s", 15 <= dur <= 45, f"{dur:.2f}s")
+check("duration 30-62 s", 30 <= dur <= 62, f"{dur:.2f}s")
 size = os.path.getsize(V)
 check("size < 90 MB", size < 90e6, f"{size / 1e6:.1f} MB")
 

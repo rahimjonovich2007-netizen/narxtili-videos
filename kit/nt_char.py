@@ -27,6 +27,15 @@ PALETTES = {
                 jacket=(42, 47, 64), jacket_d=(26, 29, 40), jacket_l=(70, 78, 102), shirt=(247, 243, 233), shirt_d=(206, 200, 188),
                 tie=(244, 196, 92), tie_d=(176, 124, 36), iris=(66, 40, 26), iris_l=(158, 104, 56), lip=(198, 108, 98), lip_d=(160, 82, 76),
                 rim=(255, 206, 120), rim2=(120, 210, 230)),
+    # Sirli Hikoyalar cast.  outfit: suit | blazer | hoodie;  hair_style: quiff | girl
+    "jasur": dict(skin=(226, 170, 128), skin_d=(198, 132, 96), skin_l=(247, 208, 172), hair=(28, 22, 26), hair_l=(96, 84, 92),
+                  jacket=(226, 116, 46), jacket_d=(146, 66, 24), jacket_l=(255, 164, 92), shirt=(238, 232, 220), shirt_d=(192, 184, 170),
+                  tie=(255, 238, 204), tie_d=(204, 184, 142), iris=(70, 44, 28), iris_l=(150, 100, 56), lip=(190, 104, 92), lip_d=(150, 78, 70),
+                  rim=(255, 206, 120), rim2=(110, 196, 240), outfit="hoodie", hair_style="quiff"),
+    "malika": dict(skin=(238, 188, 150), skin_d=(210, 150, 114), skin_l=(253, 224, 192), hair=(58, 34, 30), hair_l=(140, 96, 76),
+                   jacket=(40, 148, 150), jacket_d=(20, 88, 92), jacket_l=(90, 200, 194), shirt=(248, 242, 230), shirt_d=(204, 196, 184),
+                   tie=(232, 66, 92), tie_d=(160, 38, 60), iris=(58, 84, 52), iris_l=(138, 172, 98), lip=(212, 96, 108), lip_d=(166, 66, 82),
+                   rim=(255, 206, 120), rim2=(110, 196, 240), outfit="blazer", hair_style="girl"),
 }
 
 BASE = dict(brow=0.0, tilt=0.0, asym=0.0, eo=1.0, wink=0.0, lx=0.0, ly=0.0, smile=0.1, mo=0.0, mw=1.0, blush=0.0, sweat=0.0,
@@ -253,6 +262,12 @@ def _head(st, pal, mouth_open):
     back = Image.new("RGBA", size, (0, 0, 0, 0))
     bd = ImageDraw.Draw(back)
     _ellS(bd, cx, cy - 22, 130, 140, hair + (255,), S)
+    girl = pal.get("hair_style") == "girl"
+    if girl:                                              # long hair: fuller crown + two panels falling behind the shoulders
+        _ellS(bd, cx, cy - 26, 146, 158, hair + (255,), S)
+        for sx in (-1, 1):
+            _polyS(bd, [(cx + sx * 96, cy - 20), (cx + sx * 150, cy + 10), (cx + sx * 152, cy + 150), (cx + sx * 134, cy + 196),
+                        (cx + sx * 96, cy + 176), (cx + sx * 80, cy + 60)], hair + (255,), S)
     back = pillow(back, 26 * S, 0.6, light=(-0.4, -0.9), spec=0.35, sh_col=(8, 6, 8), hi_col=hair_l, down=6)
     out.alpha_composite(back)
 
@@ -405,12 +420,20 @@ def _head(st, pal, mouth_open):
     # ---------------------------------------------------------------- hair (front)
     fr = [(-116, 10), (-128, -40), (-112, -102), (-66, -140), (-4, -154), (58, -148), (106, -122), (128, -68), (122, 8),
           (108, -30), (96, -52), (70, -70), (32, -78), (-4, -72), (-48, -76), (-90, -44)]
+    if girl:                                         # side-swept fringe, locks framing the face down to the shoulders
+        fr = [(-128, 40), (-136, -40), (-116, -108), (-64, -146), (0, -158), (62, -150), (112, -120), (134, -64), (132, 40),
+              (112, -6), (98, -44), (62, -82), (14, -96), (-30, -86), (-72, -58), (-104, -20)]
     frp = [(cx + x, cy + y) for x, y in _smooth(fr, 8)]
     hr = Image.new("RGBA", size, (0, 0, 0, 0))
     hd = ImageDraw.Draw(hr)
     hd.polygon([(x * S, y * S) for x, y in frp], fill=hair + (255,))
-    for sx in (-1, 1):                               # sideburns
-        _polyS(hd, [(cx + sx * 124, cy + 4), (cx + sx * 112, cy + 52), (cx + sx * 100, cy + 14), (cx + sx * 102, cy - 40)], hair + (255,), S)
+    if girl:
+        for sx in (-1, 1):
+            _polyS(hd, [(cx + sx * 126, cy - 10), (cx + sx * 138, cy + 90), (cx + sx * 128, cy + 176), (cx + sx * 104, cy + 150),
+                        (cx + sx * 100, cy + 60), (cx + sx * 104, cy - 30)], hair + (255,), S)
+    else:
+        for sx in (-1, 1):                           # sideburns
+            _polyS(hd, [(cx + sx * 124, cy + 4), (cx + sx * 112, cy + 52), (cx + sx * 100, cy + 14), (cx + sx * 102, cy - 40)], hair + (255,), S)
     hr = pillow(hr, 18 * S, 0.55, light=(-0.4, -0.9), spec=0.5, sh_col=(6, 4, 6), hi_col=hair_l, down=6)
     # soft highlight sweeping over the quiff
     strk = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -423,6 +446,12 @@ def _head(st, pal, mouth_open):
     shadow = _soft((HW, HH), lambda dd: dd.polygon([(x, y + 9) for x, y in frp], fill=(110, 50, 40, 70)), 6, S)
     out.alpha_composite(_clip_to(shadow, face))
     out.alpha_composite(hr)
+    if girl:                                         # hair clip
+        clip = Image.new("RGBA", size, (0, 0, 0, 0))
+        cd_ = ImageDraw.Draw(clip)
+        _polyS(cd_, [(cx + 84, cy - 112), (cx + 124, cy - 92), (cx + 118, cy - 70), (cx + 80, cy - 92)], pal["tie"] + (255,), S)
+        clip = pillow(clip, 5 * S, 0.5, spec=0.5, sh_col=pal["tie_d"], hi_col=(255, 220, 226), down=2)
+        out.alpha_composite(clip)
 
     # ---------------------------------------------------------------- sweat
     if st["sweat"] > 0.03:
@@ -516,6 +545,20 @@ def _body(pal, S, size):
     nd.rounded_rectangle([(272 + sx) * S, (292 + sy) * S, (368 + sx) * S, (404 + sy) * S], radius=int(34 * S), fill=pal["skin_d"] + (255,))
     neck = pillow(neck, 22 * S, 0.5, spec=0.1, sh_col=(120, 60, 50), down=4)
     im.alpha_composite(neck)
+    outfit = pal.get("outfit", "suit")
+    if outfit == "hoodie":
+        # cowl collar in front of the neck base + two drawstrings
+        hc = Image.new("RGBA", size, (0, 0, 0, 0))
+        hdr = ImageDraw.Draw(hc)
+        hdr.arc([(170 + sx) * S, (352 + sy) * S, (470 + sx) * S, (452 + sy) * S], 8, 172, fill=jacket + (255,), width=int(52 * S))
+        hc = pillow(hc, 16 * S, 0.7, light=(-0.4, -0.9), spec=0.2, sh_col=jd, hi_col=jl, down=4)
+        im.alpha_composite(hc)
+        d = ImageDraw.Draw(im)
+        for sg in (-1, 1):
+            x0 = 320 + sg * 30 + sx
+            d.line([(x0 * S, 432 * S), ((x0 + sg * 6) * S, 560 * S)], fill=pal["tie"] + (255,), width=int(9 * S))
+            _ellS(d, x0 + sg * 6, 566 + sy, 8, 12, pal["tie_d"] + (255,), S)
+        return im
     # ------------------------------------------------------------ shirt, collar, lapels, tie
     d = ImageDraw.Draw(im)
     v = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -538,6 +581,12 @@ def _body(pal, S, size):
         d.line([(X(240) * S, (392 + sy) * S), (X(300) * S, (540 + sy) * S)], fill=(130, 138, 162, 120), width=int(2.2 * S))
         _polyS(d, [(X(254), 374 + sy), (X(298), 390 + sy), (X(320), 446 + sy), (X(268), 420 + sy)], shirt + (255,), S)     # collar wings
         d.line([(X(254) * S, (374 + sy) * S), (X(268) * S, (420 + sy) * S), (X(320) * S, (446 + sy) * S)], fill=shd + (255,), width=int(2.2 * S))
+    if outfit == "blazer":                      # no tie / pocket square: a small pendant instead
+        d = ImageDraw.Draw(im)
+        d.line([(300 + sx) * S, 400 * S, (320 + sx) * S, 470 * S], fill=(230, 210, 150, 255), width=int(4 * S))
+        d.line([(340 + sx) * S, 400 * S, (320 + sx) * S, 470 * S], fill=(230, 210, 150, 255), width=int(4 * S))
+        _ellS(d, 320 + sx, 480 + sy, 11, 11, tie + (255,), S)
+        return im
     # tie (satin)
     tl = Image.new("RGBA", size, (0, 0, 0, 0))
     td = ImageDraw.Draw(tl)

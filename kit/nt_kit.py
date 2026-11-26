@@ -574,7 +574,7 @@ def stills(reel, times, outdir):
         reel.draw(float(tv)).convert("RGB").save(f"{outdir}/t{float(tv):05.2f}.png")
 
 
-def render(reel, out_mp4, mix_wav, cover_t=2.9, crf=11, procs=2):
+def render(reel, out_mp4, mix_wav, cover_t=2.9, crf=19, procs=2):
     """Render all frames -> H.264 (High, yuv420p, bt709, CRF 11, faststart) + AAC 192k from mix_wav. Also writes <out>.jpg cover."""
     global _R
     _R = reel
@@ -582,7 +582,7 @@ def render(reel, out_mp4, mix_wav, cover_t=2.9, crf=11, procs=2):
     os.makedirs(os.path.dirname(os.path.abspath(out_mp4)), exist_ok=True)
     cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
            "-i", mix_wav, "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
-           "-c:v", "libx264", "-preset", "slow", "-crf", str(crf), "-profile:v", "high", "-level", "4.2",
+           "-c:v", "libx264", "-preset", "slow", "-crf", str(crf), "-maxrate", "12M", "-bufsize", "24M", "-profile:v", "high", "-level", "4.2",
            "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-r", str(FPS),
            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{tim.total:.3f}", "-movflags", "+faststart", out_mp4]
     pr = subprocess.Popen(cmd, stdin=subprocess.PIPE)
