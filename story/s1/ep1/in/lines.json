@@ -2,97 +2,85 @@
  {
   "n": "01",
   "spk": "hik",
-  "text": "Soat har tun aynan uch nol yetida to'xtaydi.",
-  "file": "in/line_01_hik.wav",
-  "dur": 6.27,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Har tun, soat uchdan yetti daqiqa o'tganda, minora soati to'xtaydi.",
+  "file": "in/line_01_hik.wav"
  },
  {
   "n": "02",
   "spk": "hik",
-  "text": "Bir oydan beri. Hech kim sababini bilmaydi.",
-  "file": "in/line_02_hik.wav",
-  "dur": 6.77,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Va butun mahalla qorong'iga cho'madi.",
+  "file": "in/line_02_hik.wav"
  },
  {
   "n": "03",
   "spk": "jasur",
-  "text": "O'ttiz bir tun. Har safar bir xil: uch, nol, yetti.",
-  "file": "in/line_03_jasur.wav",
-  "dur": 4.3,
-  "prov": "google-tts/gemini-3.8-flash-tts (earlier check)"
+  "text": "Malika, men qo'rqayotganim yo'q. Faqat... sovuq qotdim.",
+  "file": "in/line_03_jasur.wav"
  },
  {
   "n": "04",
   "spk": "malika",
-  "text": "Hilola xola arvoh deydi. Men esa mexanizm deyman.",
-  "file": "in/line_04_malika.wav",
-  "dur": 4.1,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Ha-ha, sovuqdan tishlaring taqillayaptimi?",
+  "file": "in/line_04_malika.wav"
  },
  {
   "n": "05",
-  "spk": "jasur",
-  "text": "Bugun tunda o'zimiz ko'ramiz. Birga borasanmi?",
-  "file": "in/line_05_jasur.wav",
-  "dur": 2.5,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "spk": "malika",
+  "text": "Jim! Soat hali yuryapti. Bir daqiqa qoldi, yur!",
+  "file": "in/line_05_malika.wav"
  },
  {
   "n": "06",
-  "spk": "malika",
-  "text": "Borganda ham jim bo'l. Ovozingni pasaytir.",
-  "file": "in/line_06_malika.wav",
-  "dur": 2.86,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "spk": "jasur",
+  "text": "Eshik qulflangan-ku! Endi nima qilamiz?",
+  "file": "in/line_06_jasur.wav"
  },
  {
   "n": "07",
   "spk": "jasur",
-  "text": "Tuman?! Bu kalit qayerdan?",
-  "file": "in/line_07_jasur.wav",
-  "dur": 2.91,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Voy! Tuman?! Bu kalitni qayerdan topding?",
+  "file": "in/line_07_jasur.wav"
  },
  {
   "n": "08",
   "spk": "malika",
-  "text": "Yetti. Qara, kalitda yetti raqami yozilgan.",
-  "file": "in/line_08_malika.wav",
-  "dur": 4.69,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Qara, kalitda yetti raqami yozilgan!",
+  "file": "in/line_08_malika.wav"
  },
  {
   "n": "09",
   "spk": "malika",
-  "text": "Qara! Minoraning tepasida chiroq yondi.",
-  "file": "in/line_09_malika.wav",
-  "dur": 3.43,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Tezroq, ichkariga!",
+  "file": "in/line_09_malika.wav"
  },
  {
   "n": "10",
-  "spk": "jasur",
-  "text": "Soat... uch nol yetti.",
-  "file": "in/line_10_jasur.wav",
-  "dur": 4.75,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "spk": "malika",
+  "text": "Oltita kalit osilib turibdi... yettinchi ilgak bo'sh.",
+  "file": "in/line_10_malika.wav"
  },
  {
   "n": "11",
-  "spk": "notanish",
-  "text": "Yettinchi kalit... nihoyat keldi.",
-  "file": "in/line_11_notanish.wav",
-  "dur": 6.32,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "spk": "jasur",
+  "text": "Soat! Hozir uchdan yetti daqiqa bo'ladi!",
+  "file": "in/line_11_jasur.wav"
  },
  {
   "n": "12",
+  "spk": "malika",
+  "text": "Kalitni osaman, orqaga tur!",
+  "file": "in/line_12_malika.wav"
+ },
+ {
+  "n": "13",
+  "spk": "notanish",
+  "text": "Yettinchi kalit... nihoyat keldi. Sizlarni kutgan edim.",
+  "file": "in/line_13_notanish.wav"
+ },
+ {
+  "n": "14",
   "spk": "hik",
-  "text": "Sizningcha, bu kim? Izohda yozing. Ikkinchi qism, ertaga kechqurun oltida.",
-  "file": "in/line_12_hik.wav",
-  "dur": 8.19,
-  "prov": "google-tts/gemini-3.8-flash-tts"
+  "text": "Sizningcha, bu kim? Izohda yozing.",
+  "file": "in/line_14_hik.wav"
  }
 ]

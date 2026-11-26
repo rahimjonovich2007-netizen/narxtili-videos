@@ -2,7 +2,7 @@
 
 Usage: python3 sh_audio.py EPDIR
 Needs EPDIR/in/lines.json   [{"n","spk","text","file"}, ...]  (one TTS wav per line, any rate)
-      EPDIR/in/plan.json    {"lines": {"01": {"tempo": 1.15, "pre": 0.0, "gain": 1.0}, ...}, "default": {"tempo": 1.08, "pre": 0.28}}
+      EPDIR/in/plan.json    {"speakers": {"jasur": {"pitch": 2.0}}, "lines": {"01": {"tempo": 1.15, "pre": 0.0, "gain": 1.0, "pitch": 0, "af": "aecho=..."}, ...}, "default": {"tempo": 1.08, "pre": 0.28}}
 Writes EPDIR/work/voice_clean.wav       mono 48 kHz, all voices mixed (feeds music.py / mix.py)
        EPDIR/work/spk_<speaker>.wav     per-speaker track (drives lip-sync)
        EPDIR/work/timing.json           nt_kit.Timing compatible: words (s2/e2), segs (one per line, name "L01"...), last_word_end,
@@ -62,12 +62,18 @@ def tidy(x, keep_head=0.03, keep_tail=0.10, max_pause=0.30):
     return np.concatenate(out)
 
 
-def tempo(x, f):
-    if abs(f - 1.0) < 0.01:
+def tempo(x, f, semis=0.0, extra=""):
+    """tempo f and pitch (semitones, formants follow the pitch) with rubberband; `extra` = further ffmpeg filters (echo etc.)"""
+    if abs(f - 1.0) < 0.01 and abs(semis) < 0.05 and not extra:
         return x
     src, dst = f"{D}/work/_t_in.wav", f"{D}/work/_t_out.wav"
     wavfile.write(src, SR, x)
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-af", f"atempo={f}", "-c:a", "pcm_f32le", dst], check=True)
+    chain = []
+    if abs(f - 1.0) >= 0.01 or abs(semis) >= 0.05:
+        chain.append(f"rubberband=tempo={f}:pitch={2 ** (semis / 12):.5f}:pitchq=quality")
+    if extra:
+        chain.append(extra)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-af", ",".join(chain), "-c:a", "pcm_f32le", dst], check=True)
     return wavfile.read(dst)[1].astype(np.float32)
 
 
@@ -76,10 +82,11 @@ t = 0.0
 fade = int(0.008 * SR)
 for L in LINES:
     cfg = dict(DEF)
+    cfg.update(PLAN.get("speakers", {}).get(L["spk"], {}))
     cfg.update(PLAN.get("lines", {}).get(L["n"], {}))
     t += cfg.get("pre", 0.0)
     x = tidy(load(f"{D}/{L['file']}" if not L["file"].startswith("/") else L["file"]))
-    x = tempo(x, cfg.get("tempo", 1.0)) * cfg.get("gain", 1.0)
+    x = tempo(x, cfg.get("tempo", 1.0), cfg.get("pitch", 0.0), cfg.get("af", "")) * cfg.get("gain", 1.0)
     x[:fade] *= np.linspace(0, 1, fade)
     x[-fade:] *= np.linspace(1, 0, fade)
     s0 = t
